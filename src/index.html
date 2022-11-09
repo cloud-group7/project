@@ -2,20 +2,30 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <title>Test</title>
 </head>
 <body>
     <div class="content">
         <h1>Illegal Music Site</h1>
-        <form id="addSongForm">
+        <form id="songFileForm" action="http://BUCKETNAME.s3.amazonaws.com/" method="post" enctype="multipart/form-data">
+            <input type="hidden"  name="key" value="songs/${filename}" id="keyName"/><br />
+            <input type="hidden" name="acl" value="public-read-write" />
+            <input type="hidden"  name="Content-Type" value="audio/mpeg" /> 
+            <input type="hidden" name="success_action_redirect" value="" />
+            <input type="hidden" name="Policy" id="policy" value="%POLICY_B64%" />
+            <label for="File">Mp3 File</label>
+            <input type="file" id="File" name="File"/>
+            <input type="submit" name="submit" value="Upload"/>
+        </form>
+        <br />
+        <form id="songMetaDataForm">
             <label for="Title">Title</label>
             <input type="text" id="Title" name="Title" placeholder="Title" />
             <label for="Artist">Artist</label>
             <input type="text" id="Artist" name="Artist" placeholder="Artist" />
-            <label for="File">Mp3 File</label>
-            <input type="file" id="File" name="File"/>
             <button id="formSubmit">Submit</button>
         </form>
         <div>
@@ -30,25 +40,36 @@
         </div>
     </div>
     <script>
+    document.getElementById('policy').value = `eyJleHBpcmF0aW9uIjoiMjAyMi0xMi0zMFQxM
+    jowMDowMC4wMDBaIiwiY29uZGl0aW9ucyI6W3siYWNsIjoicHVibGljLXJlYWQtd3JpdGUifSxbInN0Y
+    XJ0cy13aXRoIiwiJGtleSIsInNvbmdzLyJdLFsic3RhcnRzLXdpdGgiLCIkQ29udGVudC1UeXBlIiwiY
+    XVkaW8vIl1dfQ==`;
+    // create initial key name (random file name for first upload)
+    let r = Math.floor((Math.random() * 10000000000000000)).toString(36);
+    document.getElementById("keyName").value = 'songs/' + r + '.mp3';
+
     document.getElementById("formSubmit").addEventListener("click", formSubmit)
     async function formSubmit(e) {
         e.preventDefault()
-        let file = document.getElementById("File").files[0]
         let title = document.getElementById("Title").value
         let artist = document.getElementById("Artist").value
+        let file = document.getElementById("keyName").value
 
         let data = new FormData()
-        data.append('File', file)
         data.append('Title', title)
         data.append('Artist', artist)
-    
+        data.append('fileName', file)
+        
         let resp = await fetch("/add", {
             method: 'POST',
             body: data
         }).then((r) => {
             console.log(r)
-        }
-        )
+        })
+
+        // create a new filename in hidden form value
+        r = Math.floor((Math.random() * 10000000000000000)).toString(36);
+        document.getElementById("keyName").value = 'songs/' + r + '.mp3';
     }
     </script>
 </body>

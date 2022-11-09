@@ -4,6 +4,7 @@ const AWS = require('aws-sdk');
 const busboy = require('busboy')
 const docClient = new AWS.DynamoDB.DocumentClient();
 const s3 = new AWS.S3()
+const { Buffer } = require("node:buffer");
 
 // load html template
 const template = fs.readFileSync('./index.html').toString()
@@ -12,6 +13,30 @@ const template = fs.readFileSync('./index.html').toString()
 const params = {
     TableName: 'MusicTable'
 }
+
+// policy document for song file to s3 form
+const bucketName = "CHANGE_NAME";
+const postPolicy = {
+    "expiration": "2022-12-30T12:00:00.000Z",
+    "conditions": [
+        {"acl":"public-read-write" },
+        {"bucket":bucketName},
+        ["starts-with", "$key", "songs/"],
+        ["starts-with", "$Content-Type", "audio/"],
+        // needs to be redirected back to homepage
+        {"success_action_redirect": ""},
+    ],
+}
+
+
+// replace portions of s3 upload form with policy & bucket url
+/* 
+    either need to replace values in index.html or get the policy
+    beforehand and hardcode it
+*/
+const bucketURL = `https://${bucketName}.s3.amazonaws.com`
+const policyB64 = Buffer.from(JSON.stringify(postPolicy), 'utf-8').toString('base64')
+// i just hardcoded it for the time being
 
 exports.handler = async (e, ctx) => {
 
@@ -33,26 +58,15 @@ exports.handler = async (e, ctx) => {
 
         // the form object
         let result = {
-            filename: "",
             Title: "",
-            Artist: ""
+            Artist: "",
+            fileName:""
         }
         let data = null
-
-        // to store file info so it can be sent to s3
-        let fileinfo = {}
 
         // busboy reads and decodes the event body (form data)
         var bb = busboy({ headers: { 'content-type': contentType }})
         bb.on('file', function (field, file, info) {
-            // handle a file in the form
-
-            // create the file name
-            let r = Math.floor((Math.random() * 10000000000000000)).toString(36)
-            result.filename = 'songs/' + r + '.mp3'
-
-            // get file info (mime type, etc)
-            fileinfo = info
 
             // get file data
             file.on('data', (d) => {
@@ -73,28 +87,6 @@ exports.handler = async (e, ctx) => {
             result[fieldname] = val
         })
         .on('finish', () => {  
-            // when the file is completely processed
-
-            // s3 paramters
-            let params = {
-                Bucket: 'group7-code-bucket-73h3fdsa', 
-                Key: result.filename, 
-                Body: data,
-                ContentType: fileinfo.mimeType,
-                ContentEncoding: fileinfo.encoding,
-                ACL: 'public-read',
-            }
-            let options = {partSize: 15 * 1024 * 1024, queueSize: 10}   // 5 MB
-
-            // upload the file to s3
-            s3.upload(params, options, (err, data) => {
-                console.log(err, data)
-            }).on('httpUploadProgress', (evt) => {
-                console.log(evt)
-            }).send((err, data) => {
-                console.log(err, data)
-            })
-
             // put the song entry into dynamodb
             docClient.put({
                 TableName: 'MusicTable',
@@ -102,7 +94,7 @@ exports.handler = async (e, ctx) => {
                     id: `${result.Title}-${result.Artist}`,
                     Title: result.Title,
                     Artist: result.Artist,
-                    File: `https://group7-code-bucket-73h3fdsa.s3.amazonaws.com/${result.filename}`
+                    File: `https://${bucketName}.s3.amazonaws.com/${result.fileName}`
                 }
             }, (err, d) => {
                 if (err) {
