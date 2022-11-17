@@ -76,6 +76,11 @@ Metadata:
       embeds: []
       isassociatedwith:
         - 13c58f7b-60f4-4942-8731-d2b12e056e39
+Parameters:
+  Email:
+      Type: String
+      Default: ana_dobrianova@student.uml.edu
+      Description: Your email address to receive alarms per email
 Resources:
   URL:
     Type: 'AWS::Lambda::Url'
@@ -96,7 +101,7 @@ Resources:
       Handler: index.handler
       Runtime: nodejs16.x
       Code:
-        S3Bucket: '${bucketname}'
+        S3Bucket: cloud-uml-bucket-1090
         S3Key: index.zip
       Role: !GetAtt 
         - SiteRole
@@ -183,9 +188,35 @@ Resources:
           - Sid: SIDCODEBUCKET
             Effect: Allow
             Action: 's3:*'
-            Resource: 'arn:aws:s3:::group7-code-bucket-73h3fdsa'
+            Resource: 'arn:aws:s3:::cloud-uml-bucket-1090'
       Roles:
         - !Ref SiteRole
     Metadata:
       'AWS::CloudFormation::Designer':
         id: 6a40fbab-730f-4fd4-9647-36cf479e94c2
+  SpendingAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+        AlarmDescription: "Alarm if AWS spending is over $10"
+        MetricName: EstimatedCharges
+        Dimensions:
+        - Name: Currency
+          Value: USD
+        Statistic: Maximum
+        Period: 21600
+        EvaluationPeriods: 1
+        Threshold: 10
+        Namespace: AWS/Billing
+        ComparisonOperator: GreaterThanThreshold
+        AlarmActions:
+        - !Ref BillingAlertTopic
+        InsufficientDataActions:
+        - !Ref BillingAlertTopic
+  BillingAlertTopic:
+    Type: AWS::SNS::Topic
+  AlarmSubscriberEmail:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Endpoint: !Ref Email
+      Protocol: email
+      TopicArn: !Ref BillingAlertTopic

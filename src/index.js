@@ -1,10 +1,14 @@
-var sqrl = require('squirrelly')
-const fs = require('fs')
+var sqrl = require('squirrelly');
+const fs = require('fs');
 const AWS = require('aws-sdk');
-const busboy = require('busboy')
+const busboy = require('busboy');
 const docClient = new AWS.DynamoDB.DocumentClient();
-const s3 = new AWS.S3()
-const { Buffer } = require("node:buffer");
+const s3 = new AWS.S3({ region: "us-east-1" });
+
+const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
+const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
+const s3Client = new S3Client({ region: "us-east-1" });
+const bucketName = "cloud-uml-bucket-1090";
 
 // load html template
 const template = fs.readFileSync('./index.html').toString()
@@ -13,30 +17,6 @@ const template = fs.readFileSync('./index.html').toString()
 const params = {
     TableName: 'MusicTable'
 }
-
-// policy document for song file to s3 form
-const bucketName = "CHANGE_NAME";
-const postPolicy = {
-    "expiration": "2022-12-30T12:00:00.000Z",
-    "conditions": [
-        {"acl":"public-read-write" },
-        {"bucket":bucketName},
-        ["starts-with", "$key", "songs/"],
-        ["starts-with", "$Content-Type", "audio/"],
-        // needs to be redirected back to homepage
-        {"success_action_redirect": ""},
-    ],
-}
-
-
-// replace portions of s3 upload form with policy & bucket url
-/* 
-    either need to replace values in index.html or get the policy
-    beforehand and hardcode it
-*/
-const bucketURL = `https://${bucketName}.s3.amazonaws.com`
-const policyB64 = Buffer.from(JSON.stringify(postPolicy), 'utf-8').toString('base64')
-// i just hardcoded it for the time being
 
 exports.handler = async (e, ctx) => {
 
@@ -58,15 +38,26 @@ exports.handler = async (e, ctx) => {
 
         // the form object
         let result = {
+            filename: "",
             Title: "",
-            Artist: "",
-            fileName:""
+            Artist: ""
         }
         let data = null
+
+        // to store file info so it can be sent to s3
+        let fileinfo = {}
 
         // busboy reads and decodes the event body (form data)
         var bb = busboy({ headers: { 'content-type': contentType }})
         bb.on('file', function (field, file, info) {
+            // handle a file in the form
+
+            // create the file name
+            let r = Math.floor((Math.random() * 10000000000000000)).toString(36)
+            result.filename = 'songs/' + r + '.mp3'
+
+            // get file info (mime type, etc)
+            fileinfo = info
 
             // get file data
             file.on('data', (d) => {
@@ -87,6 +78,22 @@ exports.handler = async (e, ctx) => {
             result[fieldname] = val
         })
         .on('finish', () => {  
+            // when the file is completely processed
+
+            // s3 paramters
+            let params = {
+                Bucket: bucketName, 
+                Key: result.filename, 
+                Body: data,
+                ContentType: fileinfo.mimeType,
+                ContentEncoding: fileinfo.encoding,
+                ACL: 'public-read',
+            }
+            let options = {partSize: 15 * 1024 * 1024, queueSize: 10}   // 5 MB
+
+            // get signed url for s3 object
+            // moved to outside callback
+
             // put the song entry into dynamodb
             docClient.put({
                 TableName: 'MusicTable',
@@ -94,7 +101,7 @@ exports.handler = async (e, ctx) => {
                     id: `${result.Title}-${result.Artist}`,
                     Title: result.Title,
                     Artist: result.Artist,
-                    File: `https://${bucketName}.s3.amazonaws.com/${result.fileName}`
+                    File: `https://cloud-uml-bucket-1090.s3.amazonaws.com/${result.filename}`
                 }
             }, (err, d) => {
                 if (err) {
@@ -103,13 +110,36 @@ exports.handler = async (e, ctx) => {
                     console.log(d)
                 }
             })
+            
         })
         // form parsing error
         .on('error', err => {
             console.log('failed', err);
         })
-        // finish form decode
+        //console.log("LOG: after finsish block e.body is " + e.body)
+        // finish form 
         bb.end(e.body)
+
+        let urlParams = {
+            Bucket: bucketName, 
+            Key: result.filename,
+            Body: "BODY",
+        };
+        const command = new PutObjectCommand(urlParams);
+        let presignedURL = await getSignedUrl(s3Client, command, {expiresIn: 3600,});
+
+        console.log(urlParams)
+        return {
+            "statusCode": 200,
+            "headers": {
+                "Content-Type": "application/json",
+            },
+            "body": {
+                "url":  presignedURL,
+            }
+        };
+        
+
     } else {
         // handle default 'GET /' requests
 
