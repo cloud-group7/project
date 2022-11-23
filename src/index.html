@@ -38,7 +38,6 @@
         let artist = document.getElementById("Artist").value
 
         let data = new FormData()
-        data.append('File', file)
         data.append('Title', title)
         data.append('Artist', artist)
     
@@ -53,7 +52,7 @@
                 body: file, 
                 headers: {
                     'Access-Control-Allow-Origin':'*',
-                    'x-amz-content-sha256':'UNSIGNED-PAYLOAD'
+                    'Content-Type':'audio/mpeg'
                 }
             }).then(
                 putResp => {

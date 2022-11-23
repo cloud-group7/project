@@ -3,12 +3,11 @@ const fs = require('fs');
 const AWS = require('aws-sdk');
 const busboy = require('busboy');
 const docClient = new AWS.DynamoDB.DocumentClient();
-const s3 = new AWS.S3({ region: "us-east-1" });
 
-const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
-const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
-const s3Client = new S3Client({ region: "us-east-1" });
+const s3 = new AWS.S3({ region: "us-east-1", signatureVersion: 'v4',});
 const bucketName = "cloud-uml-bucket-1090";
+var credentials = new AWS.SharedIniFileCredentials({profile: 'ana1'});
+AWS.config.credentials = credentials;
 
 // load html template
 const template = fs.readFileSync('./index.html').toString()
@@ -30,7 +29,7 @@ exports.handler = async (e, ctx) => {
         if (e.isBase64Encoded == true) {
             let raw64 = e.body
             let buff = Buffer.from(raw64, 'base64')
-            e.body = buff.toString('ascii')
+            e.body = buff
         }
 
         // get content headers
@@ -44,21 +43,14 @@ exports.handler = async (e, ctx) => {
         }
         let data = null
 
-        // to store file info so it can be sent to s3
-        let fileinfo = {}
+        // create the file name
+        let r = Math.floor((Math.random() * 10000000000000000)).toString(36)
+        result.filename = 'songs/' + r + '.mp3'
 
         // busboy reads and decodes the event body (form data)
         var bb = busboy({ headers: { 'content-type': contentType }})
         bb.on('file', function (field, file, info) {
-            // handle a file in the form
-
-            // create the file name
-            let r = Math.floor((Math.random() * 10000000000000000)).toString(36)
-            result.filename = 'songs/' + r + '.mp3'
-
-            // get file info (mime type, etc)
-            fileinfo = info
-
+            // handle a file in the form            
             // get file data
             file.on('data', (d) => {
                 if (data === null) {
@@ -79,21 +71,6 @@ exports.handler = async (e, ctx) => {
         })
         .on('finish', () => {  
             // when the file is completely processed
-
-            // s3 paramters
-            let params = {
-                Bucket: bucketName, 
-                Key: result.filename, 
-                Body: data,
-                ContentType: fileinfo.mimeType,
-                ContentEncoding: fileinfo.encoding,
-                ACL: 'public-read',
-            }
-            let options = {partSize: 15 * 1024 * 1024, queueSize: 10}   // 5 MB
-
-            // get signed url for s3 object
-            // moved to outside callback
-
             // put the song entry into dynamodb
             docClient.put({
                 TableName: 'MusicTable',
@@ -116,19 +93,17 @@ exports.handler = async (e, ctx) => {
         .on('error', err => {
             console.log('failed', err);
         })
-        //console.log("LOG: after finsish block e.body is " + e.body)
         // finish form 
         bb.end(e.body)
 
         let urlParams = {
             Bucket: bucketName, 
             Key: result.filename,
-            Body: "BODY",
+            ContentType:'audio/mpeg',
         };
-        const command = new PutObjectCommand(urlParams);
-        let presignedURL = await getSignedUrl(s3Client, command, {expiresIn: 3600,});
 
-        console.log(urlParams)
+        const presignedURL = s3.getSignedUrl('putObject', urlParams)
+
         return {
             "statusCode": 200,
             "headers": {
