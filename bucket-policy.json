@@ -9,7 +9,7 @@
                 "s3:GetObject",
                 "s3:GetObjectVersion"
             ],
-            "Resource": "arn:aws:s3:::cloud-uml-bucket-1090/songs/*"
+            "Resource": "arn:aws:s3::: BUCKETNAME/songs/*"
         }
     ]
 }

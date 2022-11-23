@@ -5,8 +5,10 @@ const busboy = require('busboy');
 const docClient = new AWS.DynamoDB.DocumentClient();
 
 const s3 = new AWS.S3({ region: "us-east-1", signatureVersion: 'v4',});
-const bucketName = "cloud-uml-bucket-1090";
-var credentials = new AWS.SharedIniFileCredentials({profile: 'ana1'});
+
+// change bucket name ( and profile: 'X' depending on which credentials you want to load)
+const bucketName = "BUCKETNAME";
+var credentials = new AWS.SharedIniFileCredentials({profile: 'default'});
 AWS.config.credentials = credentials;
 
 // load html template
@@ -78,7 +80,7 @@ exports.handler = async (e, ctx) => {
                     id: `${result.Title}-${result.Artist}`,
                     Title: result.Title,
                     Artist: result.Artist,
-                    File: `https://cloud-uml-bucket-1090.s3.amazonaws.com/${result.filename}`
+                    File: `https://${bucketName}.s3.amazonaws.com/${result.filename}`
                 }
             }, (err, d) => {
                 if (err) {

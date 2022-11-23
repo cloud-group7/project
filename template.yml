@@ -81,6 +81,10 @@ Parameters:
       Type: String
       Default: ana_dobrianova@student.uml.edu
       Description: Your email address to receive alarms per email
+  Bucket:
+      Type: String
+      Default: cloud-uml-bucket-1090
+      Description: Name of Bucket
 Resources:
   URL:
     Type: 'AWS::Lambda::Url'
@@ -101,7 +105,7 @@ Resources:
       Handler: index.handler
       Runtime: nodejs16.x
       Code:
-        S3Bucket: cloud-uml-bucket-1090
+        S3Bucket: !Ref Bucket
         S3Key: index.zip
       Role: !GetAtt 
         - SiteRole
@@ -188,7 +192,7 @@ Resources:
           - Sid: SIDCODEBUCKET
             Effect: Allow
             Action: 's3:*'
-            Resource: 'arn:aws:s3:::cloud-uml-bucket-1090'
+            Resource: !Sub 'arn:aws:s3:::${Bucket}'
       Roles:
         - !Ref SiteRole
     Metadata:
@@ -220,3 +224,55 @@ Resources:
       Endpoint: !Ref Email
       Protocol: email
       TopicArn: !Ref BillingAlertTopic
+  Dasboard1:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: Dashboard1
+      DashboardBody: !Sub '{"widgets": [
+      {
+         "type":"metric",
+         "x":0,
+         "y":0,
+         "width":10,
+         "height":6,
+         "properties":{
+            "metrics":[
+               [ "AWS/S3", "NumberOfObjects", "BucketName", "${Bucket}" ]
+            ],
+            "region":"us-east-1",
+            "timezone":"-500",
+            "title":"Number of Objects in S3 Bucket"
+         }
+      },
+      {
+         "type":"metric",
+         "x":0,
+         "y":0,
+         "width":10,
+         "height":6,
+         "properties":{
+            "metrics":[
+               [ "AWS/S3", "4xxErrors", "BucketName", "${Bucket}"]
+            ],
+            "region":"us-east-1",
+            "timezone":"-500",
+            "title":"Number of 4xx Errors made to S3 Bucket"
+         }
+      },
+      {
+         "type":"metric",
+         "x":0,
+         "y":0,
+         "width":10,
+         "height":6,
+         "properties":{
+            "metrics":[
+               [ "AWS/Lambda", "Invocations", "FunctionName", "Server"]
+            ],
+            "region":"us-east-1",
+            "timezone":"-500",
+            "title":"Lambda Invocations"
+         }
+      }
+   ]
+}'
